@@ -5,14 +5,12 @@ using MainBot.Utilities.Extensions;
 
 namespace MainBot.Commands.SlashCommands.GuildCommands;
 
-public class StealEmoteCommand : InteractionModuleBase<ShardedInteractionContext>
+public class StealEmoteCommand(HttpClient http) : InteractionModuleBase<ShardedInteractionContext>
 {
-    private readonly HttpClient _http;
-
-    public StealEmoteCommand(HttpClient http) => _http = http;
+    private readonly HttpClient _http = http;
 
     [SlashCommand("steal-emote", "Steal an emote from another server.")]
-    public async Task StealEmoteTask(string? emote = null, string? name = null, string? imageUrl = null) => await StealEmoteAsync(emote, imageUrl, name);
+    public Task StealEmoteTask(string? emote = null, string? name = null, string? imageUrl = null) => StealEmoteAsync(emote, imageUrl, name);
 
     private async Task StealEmoteAsync(string? emote, string? imageUrl, string? name)
     {
@@ -56,7 +54,7 @@ public class StealEmoteCommand : InteractionModuleBase<ShardedInteractionContext
         using var ms = new MemoryStream(await _http.GetByteArrayAsync(emoteUrl));
         if (ms.Length > 256 * 1024)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "Emoji is too big. (Sorry resizing isn't available yet)", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "Emoji is too big. (Sorry resizing isn't available yet)", deleteTimer: 60, invisible: true);
             return;
         }
 

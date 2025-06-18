@@ -5,22 +5,21 @@ using Discord.WebSocket;
 using MainBot.Database;
 
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Configuration;
 
 namespace MainBot.Services;
 
-public class RainbowRoleService : BackgroundService
+public class RainbowRoleService(DiscordShardedClient client, IConfiguration configuration) : BackgroundService
 {
-    private readonly DiscordShardedClient _client;
+    private readonly DiscordShardedClient _client = client;
     internal ConcurrentBag<Models.RainbowRoleModel> _rainbowRoleGuilds = new();
-    public RainbowRoleService(DiscordShardedClient client)
-    {
-        _client = client;
-    }
-    protected override async Task ExecuteAsync(CancellationToken cancellationToken)
+    private readonly IConfiguration _configuration = configuration;
+
+    protected override Task ExecuteAsync(CancellationToken cancellationToken)
     {
         Console.WriteLine("Rainbow Task Started!");
         _ = Task.Factory.StartNew(async () => await RainbowRoleChanger(cancellationToken), cancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
     private async Task RainbowRoleChanger(CancellationToken cancellationToken)
@@ -42,7 +41,7 @@ public class RainbowRoleService : BackgroundService
                         SocketRole? role = guildSocket.GetRole(guild.roleId);
                         if (role is not null)
                         {
-                            await role.ModifyAsync(x => x.Color = Utilities.Miscallenous.RandomDiscordColour(guild.uglyColours));
+                            await role.ModifyAsync(async (x) => x.Color = await Utilities.Miscallenous.RandomDiscordColourAsync(guild.uglyColours, _configuration.GetSection("General")["AI_Token"]));
                             Console.WriteLine("Changed Rainbow Colour");
                         }
                     }
@@ -53,7 +52,11 @@ public class RainbowRoleService : BackgroundService
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
-                await ex.LogErrorAsync("rainbow role service func");
+                if (ex.Message == "The server responded with error 50013: Missing Permissions")
+                    return;
+
+                await using var database = new DatabaseContext(_configuration);
+                await ex.LogErrorAsync(database, "rainbow role service func");
                 await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
             }
         }

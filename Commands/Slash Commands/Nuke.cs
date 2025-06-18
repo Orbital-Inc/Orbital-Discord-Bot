@@ -8,5 +8,5 @@ namespace MainBot.Commands.SlashCommands;
 public class NukeCommand : InteractionModuleBase<ShardedInteractionContext>
 {
     [SlashCommand("nuke", "Clear all messages in a channel.")]
-    public async Task NukeChannelCommand() => await Services.DailyChannelNukeService.NukeChannelAsync(Context.Channel);
+    public Task NukeChannelCommand() => Services.DailyChannelNukeService.NukeChannelAsync(Context.Channel);
 }

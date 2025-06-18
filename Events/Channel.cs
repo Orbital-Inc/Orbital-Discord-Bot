@@ -4,21 +4,26 @@ using Discord.WebSocket;
 using MainBot.Database;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace MainBot.Events;
 
 internal class ChannelEventHandler
 {
     private readonly DiscordShardedClient _client;
-    public ChannelEventHandler(DiscordShardedClient client)
+    private readonly IConfiguration _configuration;
+
+    public ChannelEventHandler(DiscordShardedClient client, IConfiguration configuration)
     {
         _client = client;
+        _configuration = configuration;
         _client.ChannelCreated += ChannelCreated;
     }
 
     private async Task ChannelCreated(SocketChannel arg)
     {
-        await using var database = new DatabaseContext();
+        var connectionString = _configuration;
+        await using var database = new DatabaseContext(connectionString);
         var text = arg as ITextChannel;
         if (text is not null)
         {

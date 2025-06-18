@@ -5,6 +5,7 @@ using MainBot.Database;
 using MainBot.Utilities.Extensions;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace MainBot.Events;
 
@@ -12,22 +13,25 @@ public class MessageEventHandler
 {
     private readonly DiscordShardedClient _client;
     private ulong _ownerId;
-    public MessageEventHandler(DiscordShardedClient client)
+    private readonly IConfiguration _configuration;
+
+    public MessageEventHandler(DiscordShardedClient client, IConfiguration configuration)
     {
         _client = client;
+        _configuration = configuration;
         _client.ShardReady += ShardReady;
         _client.MessageDeleted += MessageDeleted;
         _client.MessagesBulkDeleted += MessagesDeleted;
         _client.MessageUpdated += MessageUpdated;
-        _client.MessageReceived += MessageRecieved;
+        _client.MessageReceived += MessageReceived;
     }
 
     private async Task ShardReady(DiscordSocketClient client) => _ownerId = (await client.GetApplicationInfoAsync()).Owner.Id;
 
-    private async Task MessageRecieved(SocketMessage arg)
+    private Task MessageReceived(SocketMessage arg)
     {
         _ = Task.Run(async () => await CheckMessageTextAsync(arg));
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
     private async ValueTask<bool> CheckMessageTextAsync(SocketMessage message)
@@ -69,7 +73,8 @@ public class MessageEventHandler
                 return;
             }
 
-            await using var database = new DatabaseContext();
+            var connectionString = _configuration;
+            await using var database = new DatabaseContext(connectionString);
             if (_client.GetChannel(message.Channel.Id) is not SocketGuildChannel socketGuildChannel)
             {
                 return;
@@ -88,7 +93,7 @@ public class MessageEventHandler
 
             if (string.IsNullOrWhiteSpace(message.Content) || string.IsNullOrWhiteSpace(arg2.Content))
             {
-                if (message.Embeds.Any())
+                if (message.Embeds.Count != 0)
                 {
                     return;
                     //log
@@ -108,14 +113,12 @@ public class MessageEventHandler
                     $"{message.Author.Username} | {message.Author.Id}",
                     message.Author.GetAvatarUrl(), new List<EmbedFieldBuilder>
                     {
-                        new EmbedFieldBuilder
-                        {
+                        new() {
                             Name = "Before",
                             Value = message.Content,
                             IsInline = true
                         },
-                        new EmbedFieldBuilder
-                        {
+                        new() {
                             Name = "After",
                             Value = arg2.Content,
                             IsInline = true
@@ -125,7 +128,8 @@ public class MessageEventHandler
         }
         catch (Exception e)
         {
-            await e.LogErrorAsync();
+            await using var database = new DatabaseContext(_configuration);
+            await e.LogErrorAsync(database);
         }
     }
 
@@ -134,7 +138,7 @@ public class MessageEventHandler
         try
         {
             var messages = arg1.ToList();
-            if (messages.Any() is false)
+            if (messages.Count != 0)
             {
                 return;
             }
@@ -144,7 +148,8 @@ public class MessageEventHandler
                 return;
             }
 
-            await using var database = new DatabaseContext();
+            var connectionString = _configuration;
+            await using var database = new DatabaseContext(connectionString);
             Database.Models.Guild? guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == msgChannel.Guild.Id);
             if (guildEntry is null)
             {
@@ -167,7 +172,8 @@ public class MessageEventHandler
         }
         catch (Exception e)
         {
-            await e.LogErrorAsync();
+            await using var database = new DatabaseContext(_configuration);
+            await e.LogErrorAsync(database);
         }
     }
 
@@ -186,7 +192,8 @@ public class MessageEventHandler
                 return;
             }
 
-            await using var database = new DatabaseContext();
+            var connectionString = _configuration;
+            await using var database = new DatabaseContext(connectionString);
             Database.Models.Guild? guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == socketGuildChannel.Guild.Id);
             if (guildEntry is null)
             {
@@ -200,7 +207,7 @@ public class MessageEventHandler
 
             if (string.IsNullOrWhiteSpace(message.Content))
             {
-                if (message.Embeds.Any())
+                if (message.Embeds.Count != 0)
                 {
                     return;
                     //log
@@ -215,8 +222,7 @@ public class MessageEventHandler
                     $"{message.Author.Username} | {message.Author.Id}",
                     message.Author.GetAvatarUrl(), new List<EmbedFieldBuilder>
                     {
-                        new EmbedFieldBuilder
-                        {
+                        new() {
                             Name = "Message Content",
                             Value = message.Content,
                         }
@@ -225,7 +231,8 @@ public class MessageEventHandler
         }
         catch (Exception e)
         {
-            await e.LogErrorAsync();
+            await using var database = new DatabaseContext(_configuration);
+            await e.LogErrorAsync(database);
         }
     }
     //add link to edited message

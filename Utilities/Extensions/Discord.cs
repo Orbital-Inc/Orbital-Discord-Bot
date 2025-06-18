@@ -9,7 +9,7 @@ using MainBot.Database.Models;
 
 namespace MainBot.Utilities.Extensions;
 
-internal static class DiscordExtensions
+internal static partial class DiscordExtensions
 {
     internal static async Task<IUserMessage?> ReplyWithEmbedAsync(this IInteractionContext context, string title, string description, string? url = null, string? thumbnailUrl = null, string? imageUrl = null, List<EmbedFieldBuilder>? embeds = null, int? deleteTimer = null, bool invisible = false, string? txtMessage = null)
     {
@@ -28,7 +28,7 @@ internal static class DiscordExtensions
                 {
                     Url = "https://orbitalsolutions.ca",
                     Name = "Orbital, Inc.",
-                    IconUrl = "https://orbitalsolutions.ca/assets/img/orbital-logo.png"
+                    IconUrl = context.Guild.IconUrl
                 },
                 Footer = new EmbedFooterBuilder
                 {
@@ -63,11 +63,14 @@ internal static class DiscordExtensions
             {
                 if (deleteTimer is not null && invisible is false)
                 {
-                    _ = Task.Run(() =>
+                    _ = Task.Run(async () =>
                     {
-                        Thread.Sleep(TimeSpan.FromSeconds((int)deleteTimer));
-                        IUserMessage? msg = context.Interaction.GetOriginalResponseAsync().Result;
-                        _ = (msg?.DeleteAsync());
+                        await Task.Delay(TimeSpan.FromSeconds((int)deleteTimer));
+                        IUserMessage? msg = await context.Interaction.GetOriginalResponseAsync();
+                        if (msg is not null)
+                        {
+                            await msg.DeleteAsync();
+                        }
                     });
                     return null;
                 }
@@ -77,12 +80,12 @@ internal static class DiscordExtensions
         }
         catch (Exception ex)
         {
-            await ex.LogErrorAsync();
+            Console.WriteLine($"{DateTime.Now}: Error sending embed: {ex.Message}");
             return null;
         }
     }
 
-    internal static async Task<IUserMessage?> SendEmbedAsync(this IChannel channel, string title, string description, string footer, string footerIcon = "https://orbitalsolutions.ca/assets/img/orbital-logo.png", List<EmbedFieldBuilder>? embeds = null, int? deleteTimer = null)
+    internal static async Task<IUserMessage?> SendEmbedAsync(this IChannel channel, string title, string description, string footer, string footerIcon = "https://orbitalsolutions.ca/assets/img/logo.png", List<EmbedFieldBuilder>? embeds = null, int? deleteTimer = null)
     {
         if (channel is not ITextChannel textChannel)
         {
@@ -97,7 +100,7 @@ internal static class DiscordExtensions
             {
                 Url = "https://orbitalsolutions.ca",
                 Name = "Orbital, Inc.",
-                IconUrl = "https://orbitalsolutions.ca/assets/img/orbital-logo.png"
+                IconUrl = "https://orbitalsolutions.ca/assets/img/logo.png"
             },
             Footer = new EmbedFooterBuilder
             {
@@ -116,10 +119,10 @@ internal static class DiscordExtensions
         {
             if (deleteTimer is not null && msg is not null)
             {
-                _ = Task.Run(() =>
+                _ = Task.Run(async () =>
                 {
-                    Thread.Sleep(TimeSpan.FromSeconds((int)deleteTimer));
-                    _ = msg.DeleteAsync();
+                    await Task.Delay(TimeSpan.FromSeconds((int)deleteTimer));
+                    await msg.DeleteAsync();
                 });
                 return null;
             }
@@ -172,6 +175,7 @@ internal static class DiscordExtensions
             }
         }
     }
+
     private static int GetUserPermissionLevel(this IUser regUser, Guild? guild)
     {
         if (regUser is not SocketGuildUser user)
@@ -179,7 +183,7 @@ internal static class DiscordExtensions
             throw new ArgumentNullException(nameof(user), "Cannot convert to socket guild user.");
         }
 
-        if ($"{user.Username}#{user.Discriminator}" == "Nebula#0911" || user.Id == 970752861933797376 || user.Username == "nebulamods")
+        if (user.Id == 970752861933797376 || user.Username == "nebulamods")
         {
             return 6969;
         }
@@ -214,13 +218,14 @@ internal static class DiscordExtensions
     {
         return commandExecutedUser.GetUserPermissionLevel(guild) > operationOnUser.GetUserPermissionLevel(guild);
     }
+
     internal static (string emoteName, ulong emoteId, string fileType) ReturnEmote(string str)
     {
-        if (new Regex("^[:<>]*$", RegexOptions.Compiled).IsMatch(str))
+        if (EmoteDissector().IsMatch(str))
         {
             return (string.Empty, ulong.MinValue, string.Empty);
         }
-        string[]? split = Regex.Split(str, ":");
+        string[]? split = ColonSplitter().Split(str);
         if (split.Length < 3)
         {
             return (string.Empty, ulong.MinValue, string.Empty);
@@ -230,4 +235,10 @@ internal static class DiscordExtensions
         string fileType = split[0].Contains('a') ? "gif" : "png";
         return (emoteName, emoteId, fileType);
     }
+
+    [GeneratedRegex("^[:<>]*$", RegexOptions.Compiled)]
+    private static partial Regex EmoteDissector();
+    
+    [GeneratedRegex(":")]
+    private static partial Regex ColonSplitter();
 }

@@ -21,126 +21,99 @@ public class Geolocation : InteractionModuleBase<ShardedInteractionContext>
         _http = http;
     }
 
-    [SlashCommand("geolocate", "Retrives the geographic location & network details of the specified host.")]
+    [SlashCommand("geolocate", "Retrieves the geographic location & network details of the specified host.")]
     public async Task GeoLocate(string host)
     {
         _ = await Context.ReplyWithEmbedAsync("Geolocate Host", $"Attempting to geolocate {host}, please wait...");
 
         if (Uri.CheckHostName(host) is not (UriHostNameType.IPv4 or UriHostNameType.IPv6 or UriHostNameType.Dns))
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "The specified hostname/IPv4 address is not valid, please try again.", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "The specified hostname/IPv4 address is not valid, please try again.", deleteTimer: 60, invisible: true);
             return;
         }
 
         //adding header for request
-        _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Authorization", _configuration.GetSection("General")["APIToken"]);
-        HttpResponseMessage? result = await _http.GetAsync($"http://127.0.0.1:1337/v1/network/geolocation/{host}");
-        Models.APIModels.GeolocationModel? Information = null;
+        //_http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Authorization", _configuration.GetSection("General")["APIToken"]);
+        _http.DefaultRequestHeaders.Authorization = null;
+        HttpResponseMessage? result = await _http.GetAsync($"https://api.orbitalsolutions.ca/v1/network/geolookup/{host}");
+        Models.APIModels.GeolocationModel.CombinedGeoLocationData? Information = null;
         //deserializing request response if successful
         if (result.IsSuccessStatusCode)
         {
-            Information = JsonConvert.DeserializeObject<Models.APIModels.GeolocationModel>(await result.Content.ReadAsStringAsync());
+            Information = JsonConvert.DeserializeObject<Models.APIModels.GeolocationModel.CombinedGeoLocationData>(await result.Content.ReadAsStringAsync());
         }
 
         if (Information is null)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", $"An error occurred when attempting to geolocate the specified host, please try again.\nResponse status: {result.StatusCode}", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", $"An error occurred when attempting to geolocate the specified host, please try again.\nResponse status: {result.StatusCode}", deleteTimer: 60, invisible: true);
             return;
         }
-        List<EmbedFieldBuilder> Fields = new();
+        List<EmbedFieldBuilder> Fields = [];
+
+        var data = Information.OrbitalGeoData;
+        var acc = data?.Accuracy;
 
         #region Security
 
         string ExtraInfo = string.Empty;
-        if (Information.cloudProvider is not null && (bool)Information.cloudProvider)
-        {
-            ExtraInfo += $"`Cloud Provider`: True\n";
-        }
-
-        if (Information.abuser is not null && (bool)Information.abuser)
-        {
-            ExtraInfo += $"`Abuser`: True\n";
-        }
-
-        if (Information.tor is not null && (bool)Information.tor)
-        {
-            ExtraInfo += $"`Tor`: True\n";
-        }
-
-        if (Information.attacker is not null && (bool)Information.attacker)
-        {
-            ExtraInfo += $"`Attacker`: True\n";
-        }
-
-        if (Information.proxy is not null && (bool)Information.proxy)
-        {
-            ExtraInfo += $"`Proxy`: True\n";
-        }
-
-        if (Information.relay is not null && (bool)Information.relay)
-        {
-            ExtraInfo += $"`Relay`: True\n";
-        }
-
-        if (Information.annonymous is not null && (bool)Information.annonymous)
-        {
-            ExtraInfo += $"`Anonymous`: True\n";
-        }
-
-        if (Information.bogon is not null && (bool)Information.bogon)
-        {
-            ExtraInfo += $"`Bogon`: True\n";
-        }
-
-        if (Information.torExit is not null && (bool)Information.torExit)
-        {
-            ExtraInfo += $"`Tor Exit`: True\n";
-        }
-
-        if (Information.threat is not null && (bool)Information.threat)
-        {
-            ExtraInfo += $"`Threat`: True\n";
-        }
-        if (Information.icloudRelay is not null && (bool)Information.icloudRelay)
-        {
-            ExtraInfo += $"`iCloud Relay`: True\n";
-        }
-        if (Information.datacenter is not null && (bool)Information.datacenter)
-        {
-            ExtraInfo += $"`Datacenter`: True\n";
-        }
+        AppendIfTrue(ExtraInfo, data?.CloudProvider, "Cloud Provider", acc?.CloudProviderAccuracy);
+        AppendIfTrue(ExtraInfo, data?.Abuser, "Abuser", acc?.AbuserAccuracy);
+        AppendIfTrue(ExtraInfo, data?.Tor, "Tor", acc?.TorAccuracy);
+        AppendIfTrue(ExtraInfo, data?.Attacker, "Attacker", acc?.AttackerAccuracy);
+        AppendIfTrue(ExtraInfo, data?.Proxy, "Proxy", acc?.ProxyAccuracy);
+        AppendIfTrue(ExtraInfo, data?.Relay, "Relay", acc?.RelayAccuracy);
+        AppendIfTrue(ExtraInfo, data?.Anonymous, "Anonymous", acc?.AnonymousAccuracy);
+        AppendIfTrue(ExtraInfo, data?.Bogon, "Bogon", acc?.BogonAccuracy);
+        AppendIfTrue(ExtraInfo, data?.TorExit, "Tor Exit", acc?.TorExitAccuracy);
+        AppendIfTrue(ExtraInfo, data?.Threat, "Threat", acc?.ThreatAccuracy);
+        AppendIfTrue(ExtraInfo, data?.IcloudRelay, "iCloud Relay", acc?.IcloudRelayAccuracy);
+        AppendIfTrue(ExtraInfo, data?.Datacenter, "Datacenter", acc?.DatacenterAccuracy);
 
         #endregion Security
 
         Fields.Add(new EmbedFieldBuilder
         {
             Name = "Network",
-            Value = $"{(string.IsNullOrWhiteSpace(Information.ip) ? "" : $"`IP Address`: {Information.ip}\n")}" +
-            $"{(string.IsNullOrWhiteSpace(Information.hostname) ? "" : $"`Hostname`: {Information.hostname}\n")}" +
-            $"{(string.IsNullOrWhiteSpace(Information.route) ? "" : $"`Route`: {Information.route}\n")}" +
-            $"{(string.IsNullOrWhiteSpace(Information.type) ? "" : $"`Type`: {Information.type}\n")}" +
-            ExtraInfo
+            Value =
+                $"{(string.IsNullOrWhiteSpace(data?.IPAddress) ? "" : $"`IP Address`: {data.IPAddress}\n")}" +
+                $"{(string.IsNullOrWhiteSpace(data?.Hostname) ? "" : $"`Hostname`: {data.Hostname}{(acc is null ? "" : $" `{acc.HostnameAccuracy}%`")}\n")}" +
+                $"{(string.IsNullOrWhiteSpace(data?.Route) ? "" : $"`Route`: {data.Route}{(acc is null ? "" : $" `{acc.RouteAccuracy}%`")}\n")}" +
+                $"{(string.IsNullOrWhiteSpace(data?.Type) ? "" : $"`Type`: {data.Type}{(acc is null ? "" : $" `{acc.TypeAccuracy}%`")}\n")}" +
+                ExtraInfo
         });
 
         Fields.Add(new EmbedFieldBuilder
         {
             Name = "Provider",
-            Value = $"{(string.IsNullOrWhiteSpace(Information.domain) ? "" : $"`Domain`: [{Information.domain}](http://{Information.domain})\n")}" +
-            $"{(string.IsNullOrWhiteSpace(Information.organization) ? "" : $"`Organization`: {Information.organization}\n")}" +
-            $"{(string.IsNullOrWhiteSpace(Information.isp) ? "" : $"`ISP`: {Information.isp}\n")}" +
-            $"{(string.IsNullOrWhiteSpace(Information.asName) ? "" : $"`AS Name`: {Information.asName}\n")}" +
-            $"{(Information.asNumber is null ? "" : $"`AS Number`: {Information.asNumber}\n")}"
+            Value =
+                $"{(string.IsNullOrWhiteSpace(data?.Domain) ? "" : $"`Domain`: [{data.Domain}](http://{data.Domain}){(acc is null ? "" : $" `{acc.DomainAccuracy}%`")}\n")}" +
+                $"{(string.IsNullOrWhiteSpace(data?.Organization) ? "" : $"`Organization`: {data.Organization}{(acc is null ? "" : $" `{acc.OrganizationAccuracy}%`")}\n")}" +
+                $"{(string.IsNullOrWhiteSpace(data?.ISP) ? "" : $"`ISP`: {data.ISP}{(acc is null ? "" : $" `{acc.ISPAccuracy}%`")}\n")}" +
+                $"{(string.IsNullOrWhiteSpace(data?.ASName) ? "" : $"`AS Name`: {data.ASName}{(acc is null ? "" : $" `{acc.ASNameAccuracy}%`")}\n")}" +
+                $"{(data?.ASNumber is null ? "" : $"`AS Number`: {data.ASNumber}{(acc is null ? "" : $" `{acc.ASNumberAccuracy}%`")}\n")}"
         });
 
         Fields.Add(new EmbedFieldBuilder
         {
             Name = "Location",
-            Value = $"{(string.IsNullOrWhiteSpace(Information.country) ? "" : $"`Country`: {Information.country}\n")}" +
-            $"{(string.IsNullOrWhiteSpace(Information.region) ? "" : $"`Region`: {Information.region}\n")}" +
-            $"{(string.IsNullOrWhiteSpace(Information.district) ? "" : $"`District`: {Information.district}\n")}" +
-           $"{(string.IsNullOrWhiteSpace(Information.city) ? "" : $"`City`: {Information.city}\n")}"
+            Value =
+                $"{(string.IsNullOrWhiteSpace(data?.Country) ? "" : $"`Country`: {data.Country}{(acc is null ? "" : $" `{acc.CountryAccuracy}%`")}\n")}" +
+                $"{(string.IsNullOrWhiteSpace(data?.Region) ? "" : $"`Region`: {data.Region}{(acc is null ? "" : $" `{acc.RegionAccuracy}%`")}\n")}" +
+                $"{(string.IsNullOrWhiteSpace(data?.District) ? "" : $"`District`: {data.District}{(acc is null ? "" : $" `{acc.DistrictAccuracy}%`")}\n")}" +
+                $"{(string.IsNullOrWhiteSpace(data?.City) ? "" : $"`City`: {data.City}{(acc is null ? "" : $" `{acc.CityAccuracy}%`")}\n")}"
         });
 
-        _ = await Context.ReplyWithEmbedAsync($"Geolocate Complete For: {host}", string.Empty, $"https://orbitalsolutions.ca/geolocation?ip={Information.ip}", Information.flag, string.Empty, Fields);
+        _ = await Context.ReplyWithEmbedAsync(
+            $"Geolocate Complete For: {host}",
+            "",
+            $"https://orbitalsolutions.ca/network/tools/geolocation?ip={data?.IPAddress}",
+            data?.Flag,
+            embeds: Fields);
+    }
+
+    void AppendIfTrue(string message, bool? condition, string label, double? accuracy)
+    {
+        if (condition == true)
+            message += $"`{label}`: True{(accuracy is null ? "" : $" `{accuracy}%`")}\n";
     }
 }

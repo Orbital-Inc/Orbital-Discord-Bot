@@ -5,8 +5,10 @@ using MainBot.Database;
 using Microsoft.EntityFrameworkCore;
 
 namespace MainBot.Buttons;
-public class CustomRoleButton : InteractionModuleBase<ShardedInteractionContext>
+public class CustomRoleButton(DatabaseContext database) : InteractionModuleBase<ShardedInteractionContext>
 {
+    private readonly DatabaseContext _database = database;
+
     [ComponentInteraction("custom-role-button")]
     public async Task ExecuteAsync()
     {
@@ -17,8 +19,7 @@ public class CustomRoleButton : InteractionModuleBase<ShardedInteractionContext>
             return;
         }
 
-        await using var database = new DatabaseContext();
-        Database.Models.Guild? guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
+        Database.Models.Guild? guildEntry = await _database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
         if (guildEntry is null)
         {
             return;

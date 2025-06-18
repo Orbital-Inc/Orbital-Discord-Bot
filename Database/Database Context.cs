@@ -2,18 +2,17 @@
 using MainBot.Database.Models.Logs;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace MainBot.Database;
 
-public class DatabaseContext : DbContext
+public class DatabaseContext(IConfiguration configuration) : DbContext
 {
+    private readonly IConfiguration _configuration = configuration;
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-//        string _connectionString = $"host=chicago-database-node-1.nebulamods.ca;user id=bot;database=nebulamods_discord_bot;password={Properties.Resources.MySql_Pass}";
-//#if DEBUG
-       string _connectionString = $"host=192.168.0.240;user id=bot;database=test_main_discord_bot;password=Test1234";
-//#endif
-        optionsBuilder.UseNpgsql(_connectionString, x => { }).UseLazyLoadingProxies();
+        optionsBuilder.UseNpgsql(_configuration.GetConnectionString("PostgresConnectionString"), x => { }).UseLazyLoadingProxies();
     }
     //dbsets
     public DbSet<ErrorLog> Errors { get; set; }

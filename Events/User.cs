@@ -7,15 +7,19 @@ using MainBot.Utilities;
 using MainBot.Utilities.Extensions;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace MainBot.Events;
 
 public class UserEventHandler
 {
     private readonly DiscordShardedClient _client;
-    public UserEventHandler(DiscordShardedClient client)
+    private readonly IConfiguration _configuration;
+
+    public UserEventHandler(DiscordShardedClient client, IConfiguration configuration)
     {
         _client = client;
+        _configuration = configuration;
         _client.UserJoined += UserJoinedGuild;
         _client.UserLeft += UserLeftGuild;
         _client.GuildMemberUpdated += UserUpdated;
@@ -23,9 +27,9 @@ public class UserEventHandler
         _client.UserUnbanned += UserUnbannedFromGuild;
     }
 
-    private async Task UserUnbannedFromGuild(SocketUser socketUser, SocketGuild socketGuild) => await AuditLogHistory(_client, socketUser, socketGuild, ActionType.Unban);
+    private Task UserUnbannedFromGuild(SocketUser socketUser, SocketGuild socketGuild) => AuditLogHistory(_client, socketUser, socketGuild, ActionType.Unban);
 
-    private async Task UserGotBannedFromGuild(SocketUser socketUser, SocketGuild socketGuild) => await AuditLogHistory(_client, socketUser, socketGuild, ActionType.Ban);
+    private Task UserGotBannedFromGuild(SocketUser socketUser, SocketGuild socketGuild) => AuditLogHistory(_client, socketUser, socketGuild, ActionType.Ban);
 
     private async Task UserUpdated(Cacheable<SocketGuildUser, ulong> arg1, SocketGuildUser GuildUserAfter)
     {
@@ -53,6 +57,8 @@ public class UserEventHandler
         try
         {
             //get audit log
+            var connectionString = _configuration;
+
             var auditLogs = await socketGuild.GetAuditLogsAsync(1).FlattenAsync();
             var log = auditLogs.FirstOrDefault();
             if (log is not null)
@@ -66,7 +72,7 @@ public class UserEventHandler
                 }
             }
 
-            await using var database = new DatabaseContext();
+            await using var database = new DatabaseContext(connectionString);
             Database.Models.Guild? guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == socketGuild.Id);
             if (guildEntry is null)
             {
@@ -81,12 +87,13 @@ public class UserEventHandler
             var channel = _client.GetChannel((ulong)guildEntry.guildSettings.userLogChannelId) as SocketGuildChannel;
             if (channel is not null)
             {
-                _ = await channel.SendEmbedAsync("User Left", $"User: {socketUser.Username}#{socketUser.Discriminator} - {socketUser.Mention}", $"{socketUser.Id}", socketUser.GetAvatarUrl());
+                _ = await channel.SendEmbedAsync("User Left", $"User: {socketUser.Username} - {socketUser.Mention}", $"{socketUser.Id}", socketUser.GetAvatarUrl());
             }
         }
         catch (Exception e)
         {
-            await e.LogErrorAsync();
+            await using var database = new DatabaseContext(_configuration);
+            await e.LogErrorAsync(database);
         }
     }
 
@@ -100,7 +107,8 @@ public class UserEventHandler
         }
         catch (Exception e)
         {
-            await e.LogErrorAsync();
+            await using var database = new DatabaseContext(_configuration);
+            await e.LogErrorAsync(database);
         }
     }
 
@@ -111,9 +119,15 @@ public class UserEventHandler
             return;
         }
 
-        await using var database = new DatabaseContext();
+        var connectionString = _configuration;
+        await using var database = new DatabaseContext(connectionString);
         Database.Models.Guild? guild = await database.Guilds.FirstOrDefaultAsync(x => x.id == user.Guild.Id);
         if (guild is null)
+        {
+            return;
+        }
+
+        if (guild.guildSettings.verifyRoleId is null or 0)
         {
             return;
         }
@@ -149,9 +163,9 @@ public class UserEventHandler
         await user.KickAsync();
     }
 
-    private static async Task PersistentMute(SocketGuildUser user)
+    private async Task PersistentMute(SocketGuildUser user)
     {
-        await using var database = new DatabaseContext();
+        await using var database = new DatabaseContext(_configuration);
         Database.Models.MuteUser? userEntry = await database.MutedUsers.FirstOrDefaultAsync(x => x.id == user.Id);
         if (userEntry is not null)
         {
@@ -161,7 +175,8 @@ public class UserEventHandler
 
     private async Task SendUserJoinEmbed(SocketGuildUser user)
     {
-        await using var database = new DatabaseContext();
+        var connectionString = _configuration;
+        await using var database = new DatabaseContext(connectionString);
         Database.Models.Guild? guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == user.Guild.Id);
         if (guildEntry is null)
         {
@@ -176,39 +191,43 @@ public class UserEventHandler
         var channel = _client.GetChannel((ulong)guildEntry.guildSettings.userLogChannelId) as SocketGuildChannel;
         if (channel is not null)
         {
-            _ = await channel.SendEmbedAsync("User Joined", $"User: {user.Username}#{user.Discriminator} - {user.Mention}", $"{user.Id}", user.GetAvatarUrl());
+            _ = await channel.SendEmbedAsync("User Joined", $"User: {user.Username} - {user.Mention}", $"{user.Id}", user.GetAvatarUrl());
         }
     }
 
-    private static async Task ChangeUsersName(SocketGuildUser user, string name)
+    private async Task ChangeUsersName(SocketGuildUser user, string name)
     {
         try
         {
             if (name.ContainsSpecialCharacters())
             {
-                string uncanceredname = name.RemoveSpecialCharacters();
-                if (string.IsNullOrWhiteSpace(uncanceredname))
+                string unCanceredName = name.RemoveSpecialCharacters();
+                if (string.IsNullOrWhiteSpace(unCanceredName))
                 {
-                    string[] NewNicknames = new string[] { "Sunshine And Rainbows", "Hello World", "Just Another", "Billy", "Tyrone", "Bob", "My Nick Was Gay", "Boost For Nickname Change", "Me Over Here", "Tim", "Jimmy", "Quacha", "Freddy", "LoKo", "YeErT dErP dErPpY" };
-                    uncanceredname = NewNicknames[new Random().Next(NewNicknames.Length)];
+                    string[] NewNicknames = ["Sunshine And Rainbows", "Hello World", "Just Another", "Billy", "Tyrone", "Bob", "My Nick Was Gay", "Boost For Nickname Change", "Me Over Here", "Tim", "Jimmy", "Quacha", "Freddy", "LoKo", "YeErT dErP dErPpY"];
+                    unCanceredName = NewNicknames[new Random().Next(NewNicknames.Length)];
                 }
-                await user.ModifyAsync(x => x.Nickname = uncanceredname);
+                await user.ModifyAsync(x => x.Nickname = unCanceredName);
 
                 Embed? RichEmbed = new EmbedBuilder()
                 .WithTitle("Nickname Status")
-                .WithAuthor("Orbital, Inc.", "https://orbitalsolutions.ca/assets/img/orbital-logo.png", "https://orbitalsolutions.ca")
-                .WithDescription($"Hello {user.Username}, your nickname in our server has just been set to {uncanceredname} as your username/nickname violates our username/nickname guidelines.")
+                .WithAuthor("Orbital, Inc.", "https://orbitalsolutions.ca/assets/img/logo.png", "https://orbitalsolutions.ca")
+                .WithDescription($"Hello {user.Username}, your nickname in our server has just been set to {unCanceredName} as your username/nickname violates our username/nickname guidelines.")
                 .WithColor(Miscallenous.RandomDiscordColour())
                 .WithCurrentTimestamp()
-                .WithFooter("Enjoy your stay", "https://orbitalsolutions.ca/assets/img/orbital-logo.png")
+                .WithFooter("Enjoy your stay", "https://orbitalsolutions.ca/assets/img/logo.png")
                 .Build();
                 try { _ = await user.SendMessageAsync(embed: RichEmbed); } catch { }
             }
         }
-        catch (Exception e) { await e.LogErrorAsync(); }
+        catch (Exception e)
+        {
+            await using var database = new DatabaseContext(_configuration);
+            await e.LogErrorAsync(database);
+        }
     }
 
-    internal static async Task AuditLogHistory(DiscordShardedClient client, SocketUser socketUser, SocketGuild socketGuild, ActionType actionType)
+    private async Task AuditLogHistory(DiscordShardedClient client, SocketUser socketUser, SocketGuild socketGuild, ActionType actionType)
     {
         try
         {
@@ -216,7 +235,7 @@ public class UserEventHandler
             string action = string.Empty;
             SocketChannel? logChannel = null;
             IAuditLogEntry? auditLog = null;
-            await using var database = new DatabaseContext();
+            await using var database = new DatabaseContext(_configuration);
             Database.Models.Guild? guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == socketGuild.Id);
             if (guildEntry is null)
             {
@@ -311,7 +330,7 @@ public class UserEventHandler
                     logChannel = client.GetChannel((ulong)guildEntry.guildSettings.userLogChannelId) as SocketGuildChannel;
                     if (logChannel is not null)
                     {
-                        _ = await logChannel.SendEmbedAsync(title, $"User: {socketUser.Username}#{socketUser.Discriminator} - {socketUser.Mention}\n{(auditLog is null ? "" : $"{action} {auditLog.User.Mention}{(auditLog.Reason is null ? "" : $"\nReason: {auditLog.Reason}")}")}", $"{socketUser.Id}", socketUser.GetAvatarUrl());
+                        _ = await logChannel.SendEmbedAsync(title, $"User: {socketUser.Username} - {socketUser.Mention}\n{(auditLog is null ? "" : $"{action} {auditLog.User.Mention}{(auditLog.Reason is null ? "" : $"\nReason: {auditLog.Reason}")}")}", $"{socketUser.Id}", socketUser.GetAvatarUrl());
                     }
 
                     break;
@@ -319,7 +338,8 @@ public class UserEventHandler
         }
         catch (Exception e)
         {
-            await e.LogErrorAsync();
+            await using var database = new DatabaseContext(_configuration);
+            await e.LogErrorAsync(database);
         }
     }
 }

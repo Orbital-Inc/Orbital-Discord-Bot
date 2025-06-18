@@ -15,17 +15,16 @@ internal static class DatabaseExtensions
         }
         catch (Exception ex)
         {
-            await ex.LogErrorAsync();
+            await ex.LogErrorAsync(database);
             return 0;
         }
     }
 
-    internal static async Task LogErrorAsync(this Exception e, string? extraInformation = null)
+    internal static async Task LogErrorAsync(this Exception e, DatabaseContext database, string? extraInformation = null)
     {
         try
         {
             //dont log specific errors
-            await using var database = new DatabaseContext();
             var entry = new Models.Logs.ErrorLog
             {
                 errorTime = DateTime.UtcNow,

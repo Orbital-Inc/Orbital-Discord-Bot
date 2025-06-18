@@ -1,23 +1,25 @@
-﻿using Discord;
+﻿using Castle.Core.Configuration;
+
+using Discord;
 using Discord.WebSocket;
 
 using MainBot.Database;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 
 namespace MainBot.Services;
 
-public class DailyChannelNukeService : BackgroundService
+public class DailyChannelNukeService(DiscordShardedClient client, Microsoft.Extensions.Configuration.IConfiguration configuration) : BackgroundService
 {
-    private readonly DiscordShardedClient _client;
+    private readonly DiscordShardedClient _client = client;
+    private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration = configuration;
 
-    public DailyChannelNukeService(DiscordShardedClient client) => _client = client;
-
-    protected override async Task ExecuteAsync(CancellationToken cancellationToken)
+    protected override Task ExecuteAsync(CancellationToken cancellationToken)
     {
         _ = Task.Factory.StartNew(async () => await AutoNukeChannels(cancellationToken), cancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
     private async Task AutoNukeChannels(CancellationToken cancellationToken)
@@ -33,7 +35,8 @@ public class DailyChannelNukeService : BackgroundService
                 Console.WriteLine(waitTime);
                 await Task.Delay((int)Math.Round(waitTime.TotalMilliseconds, 0), cancellationToken);
                 //start real work
-                await using var database = new DatabaseContext();
+                var connectionString = _configuration;
+                await using var database = new DatabaseContext(connectionString);
                 List<Database.Models.DiscordChannel>? freshList = await database.NukeChannels.ToListAsync(cancellationToken: cancellationToken);
                 foreach (Database.Models.DiscordChannel? channel in freshList)
                 {
@@ -54,12 +57,13 @@ public class DailyChannelNukeService : BackgroundService
             }
             catch (Exception ex)
             {
-                await ex.LogErrorAsync();
+                await using var database = new DatabaseContext(_configuration);
+                await ex.LogErrorAsync(database);
             }
         }
     }
 
-    internal static async Task NukeChannelAsync(IChannel channel, DatabaseContext? database = null)
+    internal static async Task NukeChannelAsync(IChannel channel, DatabaseContext? database = null, Microsoft.Extensions.Configuration.IConfiguration? configuration = null)
     {
         //check if channel is even a text channel
         if (channel is not ITextChannel textChannel)
@@ -116,7 +120,12 @@ public class DailyChannelNukeService : BackgroundService
         bool nullDB = false;
         if (database is null)
         {
-            database = new DatabaseContext();
+            if (configuration is null)
+            {
+                throw new ArgumentNullException(nameof(configuration), "Cannot nuke channel, database and configuration are both null.");
+            }
+
+            database = new DatabaseContext(configuration);
             nullDB = true;
         }
         //add channel back to daily nuke channels if exists

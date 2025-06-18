@@ -10,6 +10,7 @@ using MainBot.Loggers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace MainBot.Services;
 
@@ -46,16 +47,16 @@ internal class StartupService
         var services = new ServiceCollection();
         ConfigureServices(services);
         ServiceProvider? provider = services.BuildServiceProvider();
-        await using (var database = new DatabaseContext())
-        {
-            await database.Database.MigrateAsync();
-        }
+
+        await provider.GetRequiredService<DatabaseContext>().Database.MigrateAsync();
         provider.GetRequiredService<DiscordLogger>();
         provider.GetRequiredService<CustomService>();
         provider.GetRequiredService<ChannelEventHandler>();
         provider.GetRequiredService<MessageEventHandler>();
         provider.GetRequiredService<UserEventHandler>();
+        provider.GetRequiredService<MenuEventHandler>();
         await provider.GetRequiredService<InteractionEventHandler>().InitializeAsync();
+        provider.GetRequiredService<MenuEventHandler>().Initialize();
         await provider.GetRequiredService<DailyChannelNukeService>().StartAsync(new CancellationToken());
         await provider.GetRequiredService<AutoUnmuteUserService>().StartAsync(new CancellationToken());
         await provider.GetRequiredService<RainbowRoleService>().StartAsync(new CancellationToken());
@@ -76,6 +77,7 @@ internal class StartupService
             .AddSingleton<InteractionEventHandler>()
             .AddSingleton<MessageEventHandler>()
             .AddSingleton<UserEventHandler>()
+            .AddSingleton<MenuEventHandler>()
             .AddSingleton<DailyChannelNukeService>()
             .AddSingleton<RainbowRoleService>()
             .AddSingleton<ChannelEventHandler>()
@@ -84,6 +86,7 @@ internal class StartupService
             .AddSingleton<GuildRoleSettingsCommand>()
             .AddSingleton(new Random())
             .AddSingleton(new HttpClient())
+            .AddDbContext<DatabaseContext>(options => options.UseNpgsql(_configuration.GetConnectionString("PostgresConnectionString")))
             .AddSingleton(x => new InteractionService(x.GetRequiredService<DiscordShardedClient>(), new InteractionServiceConfig
             {
                 DefaultRunMode = RunMode.Async,

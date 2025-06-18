@@ -3,19 +3,20 @@
 using MainBot.Database;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 
 namespace MainBot.Services;
 
-public class AutoUnmuteUserService : BackgroundService
+public class AutoUnmuteUserService(DiscordShardedClient client, IConfiguration configuration) : BackgroundService
 {
-    private readonly DiscordShardedClient _client;
-    public AutoUnmuteUserService(DiscordShardedClient client) => _client = client;
+    private readonly DiscordShardedClient _client = client;
+    private readonly IConfiguration _configuration = configuration;
 
-    protected override async Task ExecuteAsync(CancellationToken cancellationToken)
+    protected override Task ExecuteAsync(CancellationToken cancellationToken)
     {
         _ = Task.Factory.StartNew(async () => await AutoUnmuteUsersAsync(cancellationToken), cancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
     private async Task AutoUnmuteUsersAsync(CancellationToken cancellationToken)
@@ -24,7 +25,8 @@ public class AutoUnmuteUserService : BackgroundService
         {
             try
             {
-                await using var database = new DatabaseContext();
+                var connectionString = _configuration;
+                await using var database = new DatabaseContext(connectionString);
                 if (await database.MutedUsers.AnyAsync(cancellationToken: cancellationToken))
                 {
                     List<Database.Models.MuteUser>? mutedUsers = await database.MutedUsers.ToListAsync(cancellationToken: cancellationToken);
@@ -50,7 +52,8 @@ public class AutoUnmuteUserService : BackgroundService
             }
             catch (Exception ex)
             {
-                await ex.LogErrorAsync();
+                await using var database = new DatabaseContext(_configuration);
+                await ex.LogErrorAsync(database);
             }
         }
     }

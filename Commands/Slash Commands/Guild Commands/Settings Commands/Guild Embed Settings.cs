@@ -10,8 +10,10 @@ using Microsoft.EntityFrameworkCore;
 namespace MainBot.Commands.SlashCommands.GuildCommands.SettingsCommands;
 
 [RequireAdministrator]
-public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractionContext>
+public class GuildEmbedSettingsCommand(DatabaseContext database) : InteractionModuleBase<ShardedInteractionContext>
 {
+    private readonly DatabaseContext _database = database;
+
     public enum guildEmbedOption
     {
         send_verify_embed,
@@ -30,11 +32,10 @@ public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractio
             throw new ArgumentNullException(nameof(textChannel), "This channel is not a text channel.");
         }
 
-        await using var database = new DatabaseContext();
-        Database.Models.Guild? guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
+        Database.Models.Guild? guildEntry = await _database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
         if (guildEntry is null)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "This requires the guild to be backed up.", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "This requires the guild to be backed up.", deleteTimer: 60, invisible: true);
             return;
         }
         switch (embedOption)
@@ -51,10 +52,10 @@ public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractio
             case guildEmbedOption.send_announcement:
                 if (description is null)
                 {
-                    _ = await Context.ReplyWithEmbedAsync("Error Occured", "This requires a message to be sent with the embed.", deleteTimer: 60, invisible: true);
+                    _ = await Context.ReplyWithEmbedAsync("Error Occurred", "This requires a message to be sent with the embed.", deleteTimer: 60, invisible: true);
                     return;
                 }
-                await SendAnnoucementMessage(textChannel, description);
+                await SendAnnouncementMessage(textChannel, description);
                 break;
             case guildEmbedOption.send_rule_ticket_embed:
                 await SendRulesMessage(textChannel, true);
@@ -63,7 +64,7 @@ public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractio
                 await SendRulesMessage(textChannel, true, true);
                 break;
             default:
-                _ = await Context.ReplyWithEmbedAsync("Error Occured", "Invalid option selected.", deleteTimer: 60, invisible: true);
+                _ = await Context.ReplyWithEmbedAsync("Error Occurred", "Invalid option selected.", deleteTimer: 60, invisible: true);
                 return;
         }
         _ = await Context.ReplyWithEmbedAsync("Guild Embed Settings", $"Successfully sent the embed to: {textChannel.Mention}", deleteTimer: 60, invisible: true);
@@ -75,7 +76,7 @@ public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractio
         {
             ActionRows = new List<ActionRowBuilder>()
                 {
-                    new ActionRowBuilder()
+                    new()
                     {
                         Components = new List<IMessageComponent>
                         {
@@ -97,7 +98,7 @@ public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractio
             {
                 Url = "https://orbitalsolutions.ca",
                 Name = "Orbital, Inc.",
-                IconUrl = "https://orbitalsolutions.ca/assets/img/orbital-logo.png"
+                IconUrl = Context.Guild.IconUrl
             },
             Footer = new EmbedFooterBuilder
             {
@@ -115,7 +116,7 @@ public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractio
         {
             ActionRows = new List<ActionRowBuilder>()
             {
-                new ActionRowBuilder()
+                new()
                 {
                     Components = new List<IMessageComponent>
                     {
@@ -137,7 +138,7 @@ public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractio
             {
                 Url = "https://orbitalsolutions.ca",
                 Name = "Orbital, Inc.",
-                IconUrl = "https://orbitalsolutions.ca/assets/img/orbital-logo.png"
+                IconUrl = Context.Guild.IconUrl
             },
             Footer = new EmbedFooterBuilder
             {
@@ -156,7 +157,7 @@ public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractio
         {
             ActionRows = new List<ActionRowBuilder>()
             {
-                new ActionRowBuilder()
+                new()
                 {
                     Components = new List<IMessageComponent>
                     {
@@ -168,7 +169,7 @@ public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractio
                         }.Build(),
                     }
                 },
-                new ActionRowBuilder()
+                new()
                 {
                     Components = new List<IMessageComponent>
                     {
@@ -186,7 +187,7 @@ public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractio
         {
             ActionRows = new List<ActionRowBuilder>()
             {
-                new ActionRowBuilder()
+                new()
                 {
                     Components = new List<IMessageComponent>
                     {
@@ -208,7 +209,7 @@ public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractio
             {
                 Url = "https://orbitalsolutions.ca",
                 Name = "Orbital, Inc.",
-                IconUrl = "https://orbitalsolutions.ca/assets/img/orbital-logo.png"
+                IconUrl = Context.Guild.IconUrl
             },
             Footer = new EmbedFooterBuilder
             {
@@ -216,32 +217,42 @@ public class GuildEmbedSettingsCommand : InteractionModuleBase<ShardedInteractio
                 IconUrl = Context.Guild.IconUrl
             },
             Description =
-                "1. Always follow the Discord TOS (https://discord.com/terms) as well as community guidelines (https://discord.com/guidelines).\n" +
-                "2. Do not share anyone's real life location, phone number or anything that could be deemed as private information.\n" +
-                "3. No discussing or sharing of illegal activities such as unethical hacking, DoSing/DDoS, botnets, webstressers, doxing or swatting.\n" +
-                "4. Do not threaten or talk about harming our users or staff in any capacity.\n" +
-                "5. Advertising is not allowed (even in direct messages), we do this because when advertising is allowed it turns into spam and abuse. (This server DOES NOT promote OR encourage spam)\n" +
-                "6. Do not spam or partake in any activity designed to decrease the usability of our server.\n" +
-                "7. Do not abuse or exploit any of our built-in or bot based systems.\n" +
-                "8. Stick to each channel's specific topic and post content in the correct channels.\n" +
-                "9. Owners, and staff must be respected, along with others in the server.\n" +
-                "Owners, and staff will take action (warnings, mute, kick, ban) for breaking the rules. We also reverse the right to act on misbehaviour/violations not explicitly listed.\n" +
-                "Once you said a message in this server, you agree to all above rules."
+    $"{Context.Guild.Name} Server Rules & Guidelines 🚀\n\n" +
+    "1. **Adhere to Discord's Policies**\n" +
+    "   Always follow the [Discord Terms of Service](https://discord.com/terms) and [Community Guidelines](https://discord.com/guidelines).\n\n" +
+    "2. **Respect Privacy**\n" +
+    "   Do not share anyone's real-life location, phone number, or any private information that could compromise someone's privacy.\n\n" +
+    "3. **No Illegal Activity**\n" +
+    "   Discussions or sharing of illegal activities (e.g., unethical hacking, DDoS attacks, botnets, web stressors, doxing, swatting) are strictly prohibited.\n\n" +
+    "4. **Zero Tolerance for Threats**\n" +
+    "   Do not threaten or talk about harming any members or staff in any capacity.\n\n" +
+    "5. **No Advertising or Spamming**\n" +
+    "   Advertising is not permitted anywhere, including direct messages. This rule helps maintain a clean environment free of spam and abuse. **Note:** This server does not promote or encourage spam.\n\n" +
+    "6. **Avoid Spamming & Disruption**\n" +
+    "   Refrain from spamming, flooding, or engaging in any activities that could hinder the usability or experience of the server.\n\n" +
+    "7. **No Exploitation or Abuse**\n" +
+    "   Do not abuse or exploit any server features or bot-based systems.\n\n" +
+    "8. **Stay on Topic**\n" +
+    "   Stick to each channel’s topic, and make sure to post content in the correct channels.\n\n" +
+    "9. **Respect Staff & Members**\n" +
+    "   Respect all members of the server, including owners and staff. Remember that we reserve the right to issue warnings, mutes, kicks, or bans if rules are broken. We also reserve the right to act on any behavior that may be disruptive, even if not explicitly listed in the rules.\n\n" +
+    $"By participating in the server and sending messages, you agree to all the rules mentioned above. Let's keep {Context.Guild.Name} a welcoming and fun place for everyone! 🌌"
+
         }.WithCurrentTimestamp().Build();
         _ = ticketButton ? await channel.SendMessageAsync(embed: embed, components: msg) : await channel.SendMessageAsync(embed: embed);
     }
 
-    private async Task SendAnnoucementMessage(ITextChannel channel, string description)
+    private async Task SendAnnouncementMessage(ITextChannel channel, string description)
     {
         Embed? embed = new EmbedBuilder()
         {
-            Title = $"Server Annoucement",
+            Title = $"Server Announcement",
             Color = Utilities.Miscallenous.RandomDiscordColour(),
             Author = new EmbedAuthorBuilder
             {
                 Url = "https://orbitalsolutions.ca",
                 Name = "Orbital, Inc.",
-                IconUrl = "https://orbitalsolutions.ca/assets/img/orbital-logo.png"
+                IconUrl = Context.Guild.IconUrl
             },
             Footer = new EmbedFooterBuilder
             {

@@ -9,28 +9,29 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MainBot.Buttons;
 
-public class OpenTicketButton : InteractionModuleBase<ShardedInteractionContext>
+public class OpenTicketButton(DatabaseContext database) : InteractionModuleBase<ShardedInteractionContext>
 {
+    private readonly DatabaseContext _database = database;
+
     [ComponentInteraction("open-ticket-button")]
     public async Task OpenTicket()
     {
-        Discord.WebSocket.SocketGuildChannel? channel = Context.Guild.Channels.FirstOrDefault(x => x.Name.Contains($"ticket-{Context.Interaction.User.Username}-{Context.Interaction.User.DiscriminatorValue}", StringComparison.OrdinalIgnoreCase));
+        Discord.WebSocket.SocketGuildChannel? channel = Context.Guild.Channels.FirstOrDefault(x => x.Name.Contains($"ticket-{Context.Interaction.User.Username}", StringComparison.OrdinalIgnoreCase));
         if (channel is not null)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "Please close your open ticket, before opening a new one.", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "Please close your open ticket, before opening a new one.", deleteTimer: 60, invisible: true);
             return;
         }
-        await using var databse = new DatabaseContext();
-        Database.Models.Guild? guild = await databse.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
+        Database.Models.Guild? guild = await _database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
 
-        RestTextChannel? ticketChannel = ticketChannel = await Context.Guild.CreateTextChannelAsync($"ticket-{Context.Interaction.User.Username}-{new Random().Next(0, 9999)}", x =>
+        RestTextChannel? ticketChannel = ticketChannel = await Context.Guild.CreateTextChannelAsync($"ticket-{Context.Interaction.User.Username}", x =>
         {
             x.CategoryId = guild?.guildSettings.ticketCategoryId;
-            x.Topic = $"Ticket for {Context.Interaction.User.Username}#{Context.Interaction.User.DiscriminatorValue}";
+            x.Topic = $"Ticket for {Context.Interaction.User.Username}";
             x.PermissionOverwrites = new List<Overwrite>()
             {
-                new Overwrite(Context.Guild.EveryoneRole.Id, PermissionTarget.Role, Utilities.Miscallenous.EveryoneTicketPermsChannel()),
-                new Overwrite(Context.User.Id, PermissionTarget.User, Utilities.Miscallenous.TicketPermsChannel()),
+                new (Context.Guild.EveryoneRole.Id, PermissionTarget.Role, Utilities.Miscallenous.EveryoneTicketPermsChannel()),
+                new (Context.User.Id, PermissionTarget.User, Utilities.Miscallenous.TicketPermsChannel()),
             };
         });
         //await ticketChannel.ModifyAsync(x => x.CategoryId = guild?.guildSettings.ticketCategoryId);
@@ -58,7 +59,7 @@ public class OpenTicketButton : InteractionModuleBase<ShardedInteractionContext>
         {
             ActionRows = new List<ActionRowBuilder>()
                 {
-                    new ActionRowBuilder()
+                    new ()
                     {
                         Components = new List<IMessageComponent>
                         {
@@ -80,7 +81,7 @@ public class OpenTicketButton : InteractionModuleBase<ShardedInteractionContext>
             {
                 Url = "https://orbitalsolutions.ca",
                 Name = "Orbital, Inc.",
-                IconUrl = "https://orbitalsolutions.ca/assets/img/logo.png"
+                IconUrl = Context.Guild.IconUrl
             },
             Footer = new EmbedFooterBuilder
             {

@@ -9,20 +9,17 @@ using MainBot.Database.Models.Logs;
 using MainBot.Utilities.Extensions;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace MainBot.Events;
 
-internal class InteractionEventHandler
+internal class InteractionEventHandler(DiscordShardedClient discord, InteractionService interactionService, IServiceProvider service, IConfiguration configuration)
 {
-    private readonly DiscordShardedClient _client;
-    private readonly InteractionService _commands;
-    private readonly IServiceProvider _services;
-    public InteractionEventHandler(DiscordShardedClient discord, InteractionService interactionService, IServiceProvider service)
-    {
-        _client = discord;
-        _commands = interactionService;
-        _services = service;
-    }
+    private readonly DiscordShardedClient _client = discord;
+    private readonly InteractionService _commands = interactionService;
+    private readonly IServiceProvider _services = service;
+    private readonly IConfiguration _configuration = configuration;
+
     public async Task InitializeAsync()
     {
         // Add the public modules that inherit InteractionModuleBase<T> to the InteractionService
@@ -45,7 +42,8 @@ internal class InteractionEventHandler
         }
         catch (Exception e)
         {
-            await e.LogErrorAsync();
+            await using var database = new DatabaseContext(_configuration);
+            await e.LogErrorAsync(database);
         }
     }
 
@@ -57,7 +55,8 @@ internal class InteractionEventHandler
         }
         catch (Exception e)
         {
-            await e.LogErrorAsync();
+            await using var database = new DatabaseContext(_configuration);
+            await e.LogErrorAsync(database);
         }
     }
 
@@ -69,13 +68,14 @@ internal class InteractionEventHandler
             switch (arg3.Error)
             {
                 case InteractionCommandError.UnmetPrecondition:
-                    _ = await arg2.ReplyWithEmbedAsync("Error Occured", arg3.ErrorReason, deleteTimer: 60);
+                    _ = await arg2.ReplyWithEmbedAsync("Error Occurred", arg3.ErrorReason, deleteTimer: 60);
                     break;
                 case InteractionCommandError.BadArgs:
-                    _ = await arg2.ReplyWithEmbedAsync("Error Occured", arg3.ErrorReason, deleteTimer: 60);
+                    _ = await arg2.ReplyWithEmbedAsync("Error Occurred", arg3.ErrorReason, deleteTimer: 60);
                     break;
                 case InteractionCommandError.Exception:
-                    await using (var database = new Database.DatabaseContext())
+                    var connectionString = _configuration;
+                    await using (var database = new DatabaseContext(connectionString))
                     {
                         var entry = new ErrorLog
                         {
@@ -86,10 +86,10 @@ internal class InteractionEventHandler
                         await database.AddAsync(entry);
                         await database.ApplyChangesAsync();
                     };
-                    _ = await arg2.ReplyWithEmbedAsync("Error Occured", arg3.ErrorReason, deleteTimer: 60);
+                    _ = await arg2.ReplyWithEmbedAsync("Error Occurred", arg3.ErrorReason, deleteTimer: 60);
                     break;
                 case InteractionCommandError.Unsuccessful:
-                    _ = await arg2.ReplyWithEmbedAsync("Error Occured", arg3.ErrorReason, deleteTimer: 60);
+                    _ = await arg2.ReplyWithEmbedAsync("Error Occurred", arg3.ErrorReason, deleteTimer: 60);
                     break;
                 default:
                     break;
@@ -136,13 +136,14 @@ internal class InteractionEventHandler
             switch (arg3.Error)
             {
                 case InteractionCommandError.UnmetPrecondition:
-                    _ = await arg2.ReplyWithEmbedAsync("Error Occured", arg3.ErrorReason, deleteTimer: 60);
+                    _ = await arg2.ReplyWithEmbedAsync("Error Occurred", arg3.ErrorReason, deleteTimer: 60);
                     break;
                 case InteractionCommandError.BadArgs:
-                    _ = await arg2.ReplyWithEmbedAsync("Error Occured", arg3.ErrorReason, deleteTimer: 60);
+                    _ = await arg2.ReplyWithEmbedAsync("Error Occurred", arg3.ErrorReason, deleteTimer: 60);
                     break;
                 case InteractionCommandError.Exception:
-                    await using (var database = new Database.DatabaseContext())
+                    var connectionString = _configuration;
+                    await using (var database = new DatabaseContext(connectionString))
                     {
                         var entry = new ErrorLog
                         {
@@ -153,10 +154,10 @@ internal class InteractionEventHandler
                         await database.AddAsync(entry);
                         await database.ApplyChangesAsync();
                     };
-                    _ = await arg2.ReplyWithEmbedAsync("Error Occured", arg3.ErrorReason, deleteTimer: 60);
+                    _ = await arg2.ReplyWithEmbedAsync("Error Occurred", arg3.ErrorReason, deleteTimer: 60);
                     break;
                 case InteractionCommandError.Unsuccessful:
-                    _ = await arg2.ReplyWithEmbedAsync("Error Occured", arg3.ErrorReason, deleteTimer: 60);
+                    _ = await arg2.ReplyWithEmbedAsync("Error Occurred", arg3.ErrorReason, deleteTimer: 60);
                     break;
                 default:
                     break;
@@ -166,7 +167,8 @@ internal class InteractionEventHandler
 
     private async Task LogCommandAsync(ICommandInfo arg1, IInteractionContext arg2, IResult arg3)
     {
-        await using var database = new DatabaseContext();
+        var connectionString = _configuration;
+        await using var database = new DatabaseContext(connectionString);
         var guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == arg2.Guild.Id);
         if (guildEntry is null)
         {
@@ -179,11 +181,13 @@ internal class InteractionEventHandler
         var commandLogChannel = await arg2.Guild.GetChannelAsync(guildEntry.guildSettings.commandLogChannelId.Value);
         _ = await commandLogChannel.SendEmbedAsync("Command Executed", $"{arg2.User.Mention} has executed {arg1.Name}\nCommand Status: {(arg3.IsSuccess ? "Success" : $"Failure: {arg3.ErrorReason}")}", $"{arg2.User.Username} | {arg2.User.Id}", arg2.User.GetAvatarUrl());
     }
+
     private async Task LogAllCommandsAsync(ICommandInfo arg1, IInteractionContext arg2, IResult arg3)
     {
         //create better method of doing this
         //993960228913676308
-        await using var database = new DatabaseContext();
+        var connectionString = _configuration;
+        await using var database = new DatabaseContext(connectionString);
         var guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == 993960228913676308);
         if (guildEntry is null)
         {

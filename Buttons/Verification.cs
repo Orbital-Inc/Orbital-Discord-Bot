@@ -6,8 +6,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MainBot.Buttons;
 
-public class VerificationButton : InteractionModuleBase<ShardedInteractionContext>
+public class VerificationButton(DatabaseContext database) : InteractionModuleBase<ShardedInteractionContext>
 {
+    private readonly DatabaseContext _database = database;
+
     [ComponentInteraction("verify-button")]
     public async Task VerifyUserTask()
     {
@@ -18,8 +20,7 @@ public class VerificationButton : InteractionModuleBase<ShardedInteractionContex
             return;
         }
 
-        await using var database = new DatabaseContext();
-        Database.Models.Guild? guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
+        Database.Models.Guild? guildEntry = await _database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
         if (guildEntry is null)
         {
             return;

@@ -4,6 +4,7 @@ using MainBot.Database;
 using MainBot.Database.Models;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace MainBot.Services;
 
@@ -11,9 +12,11 @@ public class CustomService
 {
     private readonly DiscordShardedClient _client;
     private readonly RainbowRoleService _roleService;
-    public CustomService(DiscordShardedClient client, RainbowRoleService rainbowRoleService)
+    private readonly IConfiguration _configuration;
+    public CustomService(DiscordShardedClient client, RainbowRoleService rainbowRoleService, IConfiguration configuration)
     {
         _client = client;
+        _configuration = configuration;
         _roleService = rainbowRoleService;
         _client.ShardReady += ShardReady;
     }
@@ -25,7 +28,8 @@ public class CustomService
         await _client.SetGameAsync("orbitalsolutions.ca", null, Discord.ActivityType.Watching);
         if (rainbowRole._rainbowRoleGuilds.IsEmpty)
         {
-            await using var database = new DatabaseContext();
+            var connectionString = _configuration;
+            await using var database = new DatabaseContext(connectionString);
             List<Guild>? guilds = await database.Guilds.ToListAsync();
             await Task.WhenAll(RainbowShit(guilds));
         }

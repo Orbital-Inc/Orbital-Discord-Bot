@@ -11,14 +11,10 @@ using Microsoft.EntityFrameworkCore;
 namespace MainBot.Commands.SlashCommands.GuildCommands.SettingsCommands;
 
 [RequireAdministrator]
-public class GuildRoleSettingsCommand : InteractionModuleBase<ShardedInteractionContext>
+public class GuildRoleSettingsCommand(RainbowRoleService rainbowRole, DatabaseContext database) : InteractionModuleBase<ShardedInteractionContext>
 {
-    private readonly RainbowRoleService _roleService;
-    public GuildRoleSettingsCommand(RainbowRoleService rainbowRole)
-    {
-        _roleService = rainbowRole;
-    }
-
+    private readonly RainbowRoleService _roleService = rainbowRole;
+    private readonly DatabaseContext _database = database;
     public enum guildRoleOption
     {
         set_mute_role,
@@ -33,11 +29,10 @@ public class GuildRoleSettingsCommand : InteractionModuleBase<ShardedInteraction
     public async Task ExecuteCommand(guildRoleOption roleOption, IRole role)
     {
         var rainbowRole = _roleService;
-        await using var database = new DatabaseContext();
-        Database.Models.Guild? guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
+        Database.Models.Guild? guildEntry = await _database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
         if (guildEntry is null)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "This requires the guild to be backed up.", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "This requires the guild to be backed up.", deleteTimer: 60, invisible: true);
             return;
         }
         switch (roleOption)
@@ -61,7 +56,7 @@ public class GuildRoleSettingsCommand : InteractionModuleBase<ShardedInteraction
                     });
                     break;
                 }
-                _ = await Context.ReplyWithEmbedAsync("Error Occured", "Please check your permissions then try again.", deleteTimer: 60, invisible: true);
+                _ = await Context.ReplyWithEmbedAsync("Error Occurred", "Please check your permissions then try again.", deleteTimer: 60, invisible: true);
                 return;
             case guildRoleOption.set_moderator_role:
                 guildEntry.guildSettings.moderatorRoleId = role.Id;
@@ -73,16 +68,16 @@ public class GuildRoleSettingsCommand : InteractionModuleBase<ShardedInteraction
                     guildEntry.guildSettings.administratorRoleId = role.Id;
                     break;
                 }
-                _ = await Context.ReplyWithEmbedAsync("Error Occured", "Please check your permissions then try again.", deleteTimer: 60, invisible: true);
+                _ = await Context.ReplyWithEmbedAsync("Error Occurred", "Please check your permissions then try again.", deleteTimer: 60, invisible: true);
                 return;
             case guildRoleOption.set_hidden_role:
                 guildEntry.guildSettings.hiddenRoleId = role.Id;
                 break;
             default:
-                _ = await Context.ReplyWithEmbedAsync("Error Occured", "Invalid option selected.", deleteTimer: 60, invisible: true);
+                _ = await Context.ReplyWithEmbedAsync("Error Occurred", "Invalid option selected.", deleteTimer: 60, invisible: true);
                 return;
         }
-        await database.ApplyChangesAsync(guildEntry);
+        await _database.ApplyChangesAsync(guildEntry);
         if (roleOption == guildRoleOption.set_mute_role)
         {
             await Context.Interaction.DeferAsync();

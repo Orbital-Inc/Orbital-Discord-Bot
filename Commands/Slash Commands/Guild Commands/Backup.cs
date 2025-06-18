@@ -9,16 +9,17 @@ using Microsoft.EntityFrameworkCore;
 namespace MainBot.Commands.SlashCommands.GuildCommands;
 
 [Utilities.Attributes.RequireOwner]
-public class BackupCommand : InteractionModuleBase<ShardedInteractionContext>
+public class BackupCommand(DatabaseContext database) : InteractionModuleBase<ShardedInteractionContext>
 {
+    private readonly DatabaseContext _database = database;
+
     [SlashCommand("backup", "Backup this entire server, includes: roles, channels, *users*, & permissions.")]
-    public async Task BackupDiscordServerSlashCommand() => await BackupServerAsync();
+    public Task BackupDiscordServerSlashCommand() => BackupServerAsync();
 
     private async Task BackupServerAsync()
     {
         await Context.Interaction.DeferAsync();
-        await using var database = new DatabaseContext();
-        Guild? guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
+        Guild? guildEntry = await _database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
         if (guildEntry is null)
         {
             guildEntry = new Guild
@@ -26,14 +27,14 @@ public class BackupCommand : InteractionModuleBase<ShardedInteractionContext>
                 id = Context.Guild.Id,
                 name = Context.Guild.Name,
             };
-            await database.AddAsync(guildEntry);
-            await database.ApplyChangesAsync();
+            await _database.AddAsync(guildEntry);
+            await _database.ApplyChangesAsync();
         }
         else
         {
             guildEntry.name = Context.Guild.Name;
-            await database.ApplyChangesAsync(guildEntry);
+            await _database.ApplyChangesAsync(guildEntry);
         }
-        _ = await Context.ReplyWithEmbedAsync("Server Backup", $"Sucessfully completed backing up the server.", deleteTimer: 60);
+        _ = await Context.ReplyWithEmbedAsync("Server Backup", $"Successfully completed backing up the server.", deleteTimer: 60);
     }
 }

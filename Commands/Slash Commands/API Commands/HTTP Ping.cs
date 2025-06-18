@@ -27,14 +27,15 @@ public class HTTPPing : InteractionModuleBase<ShardedInteractionContext>
 
         if (Uri.CheckHostName(host) is not (UriHostNameType.IPv4 or UriHostNameType.IPv6 or UriHostNameType.Dns))
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "The specified hostname/IPv4 address is not valid, please try again.", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "The specified hostname/IPv4 address is not valid, please try again.", deleteTimer: 60, invisible: true);
             return;
         }
 
         //add header
-        _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Authorization", _configuration.GetSection("General")["APIToken"]);
+        //_http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Authorization", _configuration.GetSection("General")["APIToken"]);
+        _http.DefaultRequestHeaders.Authorization = null;
         //response
-        HttpResponseMessage? result = await _http.GetAsync($"http://127.0.0.1:1337/network/http-ping/{host}");
+        HttpResponseMessage? result = await _http.GetAsync($"https://api.orbitalsolutions.ca/network/http-ping/{host}");
         Models.APIModels.ICMPPingModel? PingResults = null;
         if (result.IsSuccessStatusCode)
         {
@@ -42,12 +43,12 @@ public class HTTPPing : InteractionModuleBase<ShardedInteractionContext>
         }
         if (PingResults is null)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "An error occurred while attempting to ping, please try again.", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "An error occurred while attempting to ping, please try again.", deleteTimer: 60, invisible: true);
             return;
         }
         if (PingResults.results is  null)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "An error occurred while attempting to ping, please try again.", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "An error occurred while attempting to ping, please try again.", deleteTimer: 60, invisible: true);
             return;
         }
         string embedvalue = string.Empty;

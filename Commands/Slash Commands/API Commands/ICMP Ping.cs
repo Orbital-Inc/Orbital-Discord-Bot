@@ -28,14 +28,15 @@ public class ICMPPing : InteractionModuleBase<ShardedInteractionContext>
 
         if (Uri.CheckHostName(host) is not (UriHostNameType.IPv4 or UriHostNameType.IPv6 or UriHostNameType.Dns))
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "The specified hostname/IPv4 address is not valid, please try again.", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "The specified hostname/IPv4 address is not valid, please try again.", deleteTimer: 60, invisible: true);
             return;
         }
 
         //add header
-        _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Authorization", _configuration.GetSection("General")["APIToken"]);
+        //_http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Authorization", _configuration.GetSection("General")["APIToken"]);
+        _http.DefaultRequestHeaders.Authorization = null;
         //response
-        HttpResponseMessage? result = await _http.GetAsync($"http://127.0.0.1:1337/v1/network/networkping/{host}/icmp");
+        HttpResponseMessage? result = await _http.GetAsync($"https://api.orbitalsolutions.ca/v1/network/networkping/{host}/icmp");
         Models.APIModels.ICMPPingModel? PingResults = null;
         if (result.IsSuccessStatusCode)
         {
@@ -43,17 +44,22 @@ public class ICMPPing : InteractionModuleBase<ShardedInteractionContext>
         }
         if (PingResults is null)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", $"An error occurred while attempting to ping, please try again.\nResponse Status: {result.StatusCode}", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", $"An error occurred while attempting to ping, please try again.\nResponse Status: {result.StatusCode}", deleteTimer: 60, invisible: true);
             return;
         }
-        string embedvalue = string.Empty;
-        await PingResults.results.ToAsyncEnumerable().ForEachAsync(value =>
+        string embedValue = string.Empty;
+
+        if (PingResults.results is not null)
         {
-            embedvalue += $"[{PingResults.host}](https://check-host.net/check-ping?host={PingResults.host}) {(value.recievedResponse ? $"replied back in `{value.responseTime}`ms" : "failed to reply back")}\n";
-        });
+            await PingResults.results.ToAsyncEnumerable().ForEachAsync(value =>
+            {
+                embedValue += $"[{PingResults.host}](https://check-host.net/check-ping?host={PingResults.host}) {(value.recievedResponse ? $"replied back in `{value.responseTime}`ms" : "failed to reply back")}\n";
+            });
+        }
+
         if (PingResults.averageResponseTime is not null)
         {
-            embedvalue += $"Average: `{PingResults.averageResponseTime}`ms Maximum: `{PingResults.maximumResponseTime}`ms Minimum: `{PingResults.minimumResponseTime}`ms";
+            embedValue += $"Average: `{PingResults.averageResponseTime}`ms Maximum: `{PingResults.maximumResponseTime}`ms Minimum: `{PingResults.minimumResponseTime}`ms";
         }
 
         List<EmbedFieldBuilder> Fields = new()
@@ -61,7 +67,7 @@ public class ICMPPing : InteractionModuleBase<ShardedInteractionContext>
             new EmbedFieldBuilder
             {
                 Name = "ICMP Ping Results",
-                Value = embedvalue
+                Value = embedValue
             }
         };
         _ = await Context.ReplyWithEmbedAsync($"ICMP Ping Complete For: {PingResults.host}", string.Empty, $"https://orbitalsolutions.ca/geolocation?ip={PingResults.host}", string.Empty, string.Empty, Fields);

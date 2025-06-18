@@ -6,23 +6,26 @@ using MainBot.Utilities;
 using MainBot.Utilities.Extensions;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace MainBot.Commands.SlashCommands;
 
 [Utilities.Attributes.RequireDeveloper]
-public class HiddenCommands : InteractionModuleBase<ShardedInteractionContext>
+public class HiddenCommands(IConfiguration configuration, DatabaseContext database) : InteractionModuleBase<ShardedInteractionContext>
 {
+    private readonly IConfiguration _configuration = configuration;
+    private readonly DatabaseContext _database = database;
+
     [SlashCommand("guilds", "Displays a list of guilds.")]
     public async Task ListDiscordServersCommand()
     {
         await Context.Interaction.DeferAsync();
-        await using var database = new DatabaseContext();
         string? serverDetails = string.Empty;
         await Context.Client.Guilds.ToAsyncEnumerable().ForEachAwaitAsync(async guild =>
         {
-            serverDetails += await database.Guilds.FirstOrDefaultAsync(x => x.id == guild.Id) is not null ?
-            $"{guild.Name} | {guild.Id} | {guild.MemberCount} ~ {guild.Owner.Username}#{guild.Owner.Discriminator} | BACKED UP\n"
-            : $"{guild.Name} | {guild.Id} | {guild.MemberCount} ~ {guild.Owner.Username}#{guild.Owner.Discriminator}\n";
+            serverDetails += await _database.Guilds.FirstOrDefaultAsync(x => x.id == guild.Id) is not null ?
+            $"{guild.Name} | {guild.Id} | {guild.MemberCount} ~ {guild.Owner.Username} | BACKED UP\n"
+            : $"{guild.Name} | {guild.Id} | {guild.MemberCount} ~ {guild.Owner.Username}\n";
         });
         _ = await Context.ReplyWithEmbedAsync("Server List", serverDetails, deleteTimer: 120, invisible: true);
     }
@@ -32,45 +35,44 @@ public class HiddenCommands : InteractionModuleBase<ShardedInteractionContext>
     {
         try
         {
-            await using var database = new DatabaseContext();
-            Database.Models.Guild? guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
+            Database.Models.Guild? guildEntry = await _database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
             if (guildEntry is null)
             {
-                _ = await Context.ReplyWithEmbedAsync("Error Occured", "This requires the guild to be backed up.", deleteTimer: 60, invisible: true);
+                _ = await Context.ReplyWithEmbedAsync("Error Occurred", "This requires the guild to be backed up.", deleteTimer: 60, invisible: true);
                 return;
             }
             if (guildEntry.guildSettings.rainbowRoleId is not null)
             {
                 Discord.WebSocket.SocketRole? role = Context.Guild.GetRole((ulong)guildEntry.guildSettings.rainbowRoleId);
-                await role.ModifyAsync(x =>
+                await role.ModifyAsync(async (x) =>
                 {
-                    x.Color = Utilities.Miscallenous.RandomDiscordColour(guildEntry.guildSettings.uglyColours);
+                    var newColor = await Miscallenous.RandomDiscordColourAsync(guildEntry.guildSettings.uglyColours, _configuration.GetSection("General")["AI_Token"]);
+                    x.Color = newColor;
                 });
                 _ = await Context.ReplyWithEmbedAsync("Rainbow Role", "Successfully, swapped the role colour", deleteTimer: 60, invisible: true);
                 return;
             }
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "Rainbow role is not set", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "Rainbow role is not set", deleteTimer: 60, invisible: true);
         }
         catch (Exception ex)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", ex.Message, deleteTimer: 120, invisible: true);
-            await ex.LogErrorAsync();
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", ex.Message, deleteTimer: 120, invisible: true);
+            await ex.LogErrorAsync(_database);
         }
     }
 
     [SlashCommand("rainbow-colour-ugly", "Adds the current rainbow role colour to the list of colours to not be used.")]
     public async Task UglyColour()
     {
-        await using var database = new DatabaseContext();
-        var guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
+        var guildEntry = await _database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
         if (guildEntry is null)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "This requires the guild to be backed up.", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "This requires the guild to be backed up.", deleteTimer: 60, invisible: true);
             return;
         }
         if (guildEntry.guildSettings.rainbowRoleId is null)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "Rainbow role is not set.", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "Rainbow role is not set.", deleteTimer: 60, invisible: true);
             return;
         }
         if (guildEntry.guildSettings.uglyColours is null)
@@ -80,23 +82,32 @@ public class HiddenCommands : InteractionModuleBase<ShardedInteractionContext>
         var rainbowRole = Context.Guild.GetRole((ulong)guildEntry.guildSettings.rainbowRoleId);
         if (rainbowRole is null)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "Cannot find rainbow role, please try again.", deleteTimer: 60);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "Cannot find rainbow role, please try again.", deleteTimer: 60);
             return;
         }
         if (guildEntry.guildSettings.uglyColours.Contains(rainbowRole.Color.RawValue))
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "Colour is already in list.");
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "Colour is already in list.");
             return;
         }
         var colours = guildEntry.guildSettings.uglyColours.ToList();
         colours.Add(rainbowRole.Color.RawValue);
         guildEntry.guildSettings.uglyColours = colours.ToArray();
-        await database.ApplyChangesAsync(guildEntry);
-        await rainbowRole.ModifyAsync(x => x.Color = Miscallenous.RandomDiscordColour(guildEntry.guildSettings.uglyColours));
+        await _database.ApplyChangesAsync(guildEntry);
+        await rainbowRole.ModifyAsync(async (x) => x.Color = await Miscallenous.RandomDiscordColourAsync(guildEntry.guildSettings.uglyColours, _configuration.GetSection("General")["AI_Token"]));
         _ = await Context.ReplyWithEmbedAsync("Ugly Colour", "Successfully added colour to the ugly colour list and swapped role colour.", deleteTimer: 60, invisible: true);
     }
 
-    [SlashCommand("giveway-picker", "Picks a giveaway winner.")]
+    public Task FixUsernames()
+    {
+        Context.Guild.Users.ToAsyncEnumerable().ForEachAwaitAsync(async user =>
+        {
+
+        });
+        return Task.CompletedTask;
+    }
+
+    [SlashCommand("giveaway-picker", "Picks a giveaway winner.")]
     public async Task GiveAwaySelector(IChannel channel, string messageId, string? emote = "diamond_booster")
     {
         try
@@ -125,8 +136,8 @@ public class HiddenCommands : InteractionModuleBase<ShardedInteractionContext>
         }
         catch (Exception ex)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", ex.Message, deleteTimer: 120, invisible: true);
-            await ex.LogErrorAsync();
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", ex.Message, deleteTimer: 120, invisible: true);
+            await ex.LogErrorAsync(_database);
         }
     }
 
@@ -178,12 +189,12 @@ public class HiddenCommands : InteractionModuleBase<ShardedInteractionContext>
             {
                 Url = "https://orbitalsolutions.ca",
                 Name = "Orbital, Inc.",
-                IconUrl = "https://orbitalsolutions.ca/assets/img/orbital-logo.png"
+                IconUrl = Context.Guild.IconUrl
             },
             Footer = new EmbedFooterBuilder
             {
                 Text = "GiveAway Time! Enjoy!",
-                IconUrl = "https://orbitalsolutions.ca/assets/img/orbital-logo.png"
+                IconUrl = Context.Guild.IconUrl
             },
             Description = description is null ? $"Monthly Nitro giveaway, react with {guildEmote} in order to entered. Draw is in <t:{drawDate.ToUnixTimeSeconds()}:R>" : description + $"\nDraw is in <t:{drawDate.ToUnixTimeSeconds()}:R>",
         }.WithCurrentTimestamp().Build();

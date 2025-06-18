@@ -9,16 +9,17 @@ using Microsoft.EntityFrameworkCore;
 namespace MainBot.Commands.SlashCommands.GuildCommands.SettingsCommands;
 
 [RequireModerator]
-public class DisplaySettingsCommand : InteractionModuleBase<ShardedInteractionContext>
+public class DisplaySettingsCommand(DatabaseContext database) : InteractionModuleBase<ShardedInteractionContext>
 {
+    private readonly DatabaseContext _database = database;
+
     [SlashCommand("guild-settings", "Display guild settings.")]
     public async Task ExecuteCommand()
     {
-        await using var database = new DatabaseContext();
-        Database.Models.Guild? guildEntry = await database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
+        Database.Models.Guild? guildEntry = await _database.Guilds.FirstOrDefaultAsync(x => x.id == Context.Guild.Id);
         if (guildEntry is null)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "This requires the guild to be backed up.", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "This requires the guild to be backed up.", deleteTimer: 60, invisible: true);
             return;
         }
         _ = await Context.ReplyWithEmbedAsync("Guild Settings",

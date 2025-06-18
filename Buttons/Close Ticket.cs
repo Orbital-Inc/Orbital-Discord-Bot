@@ -5,5 +5,5 @@ namespace MainBot.Buttons;
 public class CloseTicketButton : InteractionModuleBase<ShardedInteractionContext>
 {
     [ComponentInteraction("close-ticket-button")]
-    public async Task CloseTicket() => await Context.Guild.GetTextChannel(Context.Interaction.Channel.Id).DeleteAsync();
+    public Task CloseTicket() => Context.Guild.GetTextChannel(Context.Interaction.Channel.Id).DeleteAsync();
 }

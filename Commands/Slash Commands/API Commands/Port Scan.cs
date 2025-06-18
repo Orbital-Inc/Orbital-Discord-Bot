@@ -9,18 +9,11 @@ using Newtonsoft.Json;
 
 namespace MainBot.Commands.SlashCommands.APICommands;
 
-public class PortScan : InteractionModuleBase<ShardedInteractionContext>
+public class PortScan(HttpClient http, IConfiguration configuration) : InteractionModuleBase<ShardedInteractionContext>
 {
-    private readonly HttpClient _http;
+    private readonly HttpClient _http = http;
 
-    private readonly IConfiguration _configuration;
-
-    public PortScan(HttpClient http, IConfiguration configuration)
-    {
-        _configuration = configuration;
-        _http = http;
-    }
-
+    private readonly IConfiguration _configuration = configuration;
 
     [SlashCommand("port-scan", "Scan specified host to see if the specified port(s) is open using either TCP/UDP.")]
     public async Task Scan(string host, string ports = "22,53,80,443,1194")
@@ -29,7 +22,7 @@ public class PortScan : InteractionModuleBase<ShardedInteractionContext>
 
         if (string.IsNullOrWhiteSpace(host))
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", "The specified hostname/IPv4 address is not valid, please try again.", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", "The specified hostname/IPv4 address is not valid, please try again.", deleteTimer: 60, invisible: true);
             return;
         }
 
@@ -68,9 +61,10 @@ public class PortScan : InteractionModuleBase<ShardedInteractionContext>
 
         #endregion Info Checks
 
-        _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Authorization", _configuration.GetSection("General")["APIToken"]);
+        //_http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Authorization", _configuration.GetSection("General")["APIToken"]);
+        _http.DefaultRequestHeaders.Authorization = null;
         Models.APIModels.PortScanModel? PortScanResult = null;
-        HttpResponseMessage? result = await _http.GetAsync($"http://127.0.0.1:1337/v1/network/portscan/{host}/{ports}");
+        HttpResponseMessage? result = await _http.GetAsync($"https://api.orbitalsolutions.ca/v1/network/portscan/{host}/{ports}");
         if (result.IsSuccessStatusCode)
         {
             PortScanResult = JsonConvert.DeserializeObject<Models.APIModels.PortScanModel>(await result.Content.ReadAsStringAsync());
@@ -78,21 +72,25 @@ public class PortScan : InteractionModuleBase<ShardedInteractionContext>
 
         if (PortScanResult is null)
         {
-            _ = await Context.ReplyWithEmbedAsync("Error Occured", $"An error occurred while attempting to port scan, please try again.\nResponse Staus: {result.StatusCode}", deleteTimer: 60, invisible: true);
+            _ = await Context.ReplyWithEmbedAsync("Error Occurred", $"An error occurred while attempting to port scan, please try again.\nResponse Status: {result.StatusCode}", deleteTimer: 60, invisible: true);
             return;
         }
 
-        string embedvalue = string.Empty;
-        await PortScanResult.results.ToAsyncEnumerable().ForEachAsync(value =>
+        string embedValue = string.Empty;
+        if (PortScanResult.results is not null)
         {
-            embedvalue += $"{value.protocol} to port [{value.port}](https://check-host.net/check-{value.protocol.ToLower()}?host={PortScanResult.host}%3A{value.port}) is `{value.status}`\n";
-        });
+            await PortScanResult.results.ToAsyncEnumerable().ForEachAsync(value =>
+            {
+                embedValue += $"{value.protocol} to port [{value.port}](https://check-host.net/check-{value?.protocol?.ToLower()}?host={PortScanResult.host}%3A{value?.port}) is `{value?.status}`\n";
+            });
+        }
+
         List<EmbedFieldBuilder> Fields = new()
         {
             new EmbedFieldBuilder
             {
                 Name = "Port Scan Results",
-                Value = embedvalue
+                Value = embedValue
             }
         };
 
